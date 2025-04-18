@@ -54,7 +54,7 @@ float fSpanHUDAspect;
 int iCurrentResX;
 int iCurrentResY;
 SDK::UEngine* Engine = nullptr;
-float fMovieAspect = 2.3f;
+float fMovieAspect = 2.37f;
 
 void CalculateAspectRatio(bool bLog)
 {
@@ -169,7 +169,7 @@ void Configuration()
     inipp::get_value(ini.sections["Fix Aspect Ratio"], "Enabled", bFixAspect);
     inipp::get_value(ini.sections["Fix FOV"], "Enabled", bFixFOV);
     inipp::get_value(ini.sections["Fix HUD"], "Enabled", bFixHUD);
-    inipp::get_value(ini.sections["Gameplay HUD"], "Enabled", bSpanHUD);
+    inipp::get_value(ini.sections["Gameplay HUD"], "Span", bSpanHUD);
     inipp::get_value(ini.sections["Gameplay HUD"], "AspectRatio", fSpanHUDAspect);
     
     // Clamp settings
@@ -291,7 +291,7 @@ void HUD()
             MoviesMidHook = safetyhook::create_mid(MoviesScanResult,
                 [](SafetyHookContext& ctx) {
                     // The pre-rendered videos in this game have embedded letterboxing (of varying sizes).
-                    // So we can only safely crop down to 2.3, even though some videos have a wider aspect ratio than that.
+                    // The aspect ratio varies between 2.17 to 2.37 depending on the video.
 
                     int VideoWidth = static_cast<int>(ctx.rdi);
                     int VideoHeight = static_cast<int>(ctx.rsi);
@@ -458,54 +458,6 @@ void HUD()
     }
 }
 
-void EnableConsole()
-{ 
-    #ifdef _DEBUG
-    // Get GEngine
-    for (int i = 0; i < 200; ++i) { // 20s
-        Engine = SDK::UEngine::GetEngine();
-
-        if (Engine && Engine->ConsoleClass && Engine->GameViewport)
-            break;
-
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-
-    if (!Engine || !Engine->ConsoleClass || !Engine->GameViewport) {
-        spdlog::error("Enable Console: Failed to find GEngine address after 20 seconds.");
-        return;
-    }
-
-    spdlog::info("Enable Console: GEngine address = {:x}", (uintptr_t)Engine);
-
-    // Construct console
-    SDK::UObject* NewObject = SDK::UGameplayStatics::SpawnObject(Engine->ConsoleClass, Engine->GameViewport);
-    if (NewObject) {
-        Engine->GameViewport->ViewportConsole = static_cast<SDK::UConsole*>(NewObject);
-        spdlog::info("Enable Console: Console object constructed.");
-    }
-    else {
-        spdlog::error("Enable Console: Failed to construct console object.");
-        return;
-    }
-
-    // Get input settings
-    SDK::UInputSettings* InputSettings = SDK::UInputSettings::GetDefaultObj();
-
-    // Set keybind
-    InputSettings->ConsoleKeys[0].KeyName = SDK::UKismetStringLibrary::Conv_StringToName(L"Tilde");
-
-    if (InputSettings) {
-        if (InputSettings->ConsoleKeys && InputSettings->ConsoleKeys.Num() > 0) {
-            spdlog::info("Enable Console: Console enabled - access it using key: {}.", InputSettings->ConsoleKeys[0].KeyName.ToString().c_str());
-        }
-    }
-    else {
-        spdlog::error("Enable Console: Failed to retreive input settings.");
-    }
-    #endif
-}
-
 DWORD __stdcall Main(void*)
 {
     Logging();
@@ -514,7 +466,6 @@ DWORD __stdcall Main(void*)
     CurrentResolution();
     AspectRatioFOV();
     HUD();
-    EnableConsole();
 
     return true;
 }

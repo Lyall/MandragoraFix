@@ -8,6 +8,7 @@
 
 #include "SDK/Engine_classes.hpp"
 #include "SDK/BP_HUD_classes.hpp"
+#include "SDK/BP_CutsceneCinematic_classes.hpp"
 
 #define spdlog_confparse(var) spdlog::info("Config Parse: {}: {}", #var, var)
 
@@ -43,6 +44,7 @@ float fHUDHeightOffset;
 // Ini variables
 bool bFixAspect;
 bool bFixFOV;
+bool bFixHUD;
 bool bSpanHUD;
 float fSpanHUDAspect;
 
@@ -163,8 +165,9 @@ void Configuration()
     // Load settings from ini
     inipp::get_value(ini.sections["Fix Aspect Ratio"], "Enabled", bFixAspect);
     inipp::get_value(ini.sections["Fix FOV"], "Enabled", bFixFOV);
-    inipp::get_value(ini.sections["Span HUD"], "Enabled", bSpanHUD);
-    inipp::get_value(ini.sections["Span HUD"], "AspectRatio", fSpanHUDAspect);
+    inipp::get_value(ini.sections["Fix HUD"], "Enabled", bFixHUD);
+    inipp::get_value(ini.sections["Gameplay HUD"], "Enabled", bSpanHUD);
+    inipp::get_value(ini.sections["Gameplay HUD"], "AspectRatio", fSpanHUDAspect);
     
     // Clamp settings
     fSpanHUDAspect = std::clamp(fSpanHUDAspect, 0.00f, 10.00f);
@@ -172,6 +175,7 @@ void Configuration()
     // Log ini parse
     spdlog_confparse(bFixAspect);
     spdlog_confparse(bFixFOV);
+    spdlog_confparse(bFixHUD);
     spdlog_confparse(bSpanHUD);
     spdlog_confparse(fSpanHUDAspect);
 
@@ -275,24 +279,26 @@ void AspectRatioFOV()
 
 void HUD()
 {
-    if (bSpanHUD) 
+    if (bFixHUD || bSpanHUD) 
     {
-        // GameplayHUD
-        std::uint8_t* GameplayHUDScanResult = Memory::PatternScan(exeModule, "E8 ?? ?? ?? ?? 48 8B ?? ?? 33 ?? 44 0F ?? ?? ?? ?? 48 85 ?? 0F ?? ?? ?? ?? 0F 95 ?? 48 ?? ?? 48 89 ?? ?? 48 8B ?? 48 8B ?? FF 90 ?? ?? ?? ??");
-        if (GameplayHUDScanResult) {
-            spdlog::info("HUD: Gameplay HUD: Address is {:s}+{:x}", sExeName.c_str(), GameplayHUDScanResult - reinterpret_cast<std::uint8_t*>(exeModule));
+        // HUD Objects
+        std::uint8_t* HUDObjectsScanResult = Memory::PatternScan(exeModule, "45 33 ?? 48 8D ?? ?? ?? ?? ?? 89 ?? ?? 48 89 ?? ?? 33 ?? 48 8D ?? ?? ?? ?? ?? 89 ?? ??");
+        if (HUDObjectsScanResult) {
+            spdlog::info("HUD: HUD Objects: Address is {:s}+{:x}", sExeName.c_str(), HUDObjectsScanResult - reinterpret_cast<std::uint8_t*>(exeModule));
             
             static SDK::UBP_HUD_C* BP_HUD = nullptr;
+            static SDK::UBP_CutsceneCinematic_C* BP_CutsceneCinematic = nullptr;
+
             static SDK::UObject* Object = nullptr;
             static SDK::UObject* OldObject = nullptr;
             static std::string ObjectName;
             
-            static SafetyHookMid GameplayHUDMidHook{};
-            GameplayHUDMidHook = safetyhook::create_mid(GameplayHUDScanResult + 0x5,
+            static SafetyHookMid HUDObjectsMidHook{};
+            HUDObjectsMidHook = safetyhook::create_mid(Memory::GetAbsolute(HUDObjectsScanResult + 0x6),
                 [](SafetyHookContext& ctx) {
-                    if (!ctx.rdi) return;
+                    if (!ctx.rcx) return;
 
-                    Object = reinterpret_cast<SDK::UObject*>(ctx.rdi);
+                    Object = reinterpret_cast<SDK::UObject*>(ctx.rcx);
 
                     // Check if UObject has changed
                     if (Object != OldObject) {
@@ -300,8 +306,8 @@ void HUD()
 
                         // Store name of UObject
                         ObjectName = Object->GetName();
-
-                        // Get address of "BP_HUD_C"
+                       
+                        // Get gameplay HUD
                         if (ObjectName.contains("BP_HUD_C") && BP_HUD != Object) {
                             #ifdef _DEBUG
                             spdlog::info("HUD: Widgets: BP_HUD_C: {}", ObjectName);
@@ -310,33 +316,70 @@ void HUD()
                             
                             // Store address of "BP_HUD_C"
                             BP_HUD = static_cast<SDK::UBP_HUD_C*>(Object);
-                        }
 
-                        // Adjust HUD
-                        if (BP_HUD && Object == BP_HUD) {
-                            // Get scalebox and sizebox
-                            auto FullscreenScaleBox = static_cast<SDK::UFullScreenScaleBox*>(BP_HUD->WidgetTree->RootWidget);
-                            auto SizeBox = static_cast<SDK::USizeBox*>(FullscreenScaleBox->Slots[0]->Content);
+                            // Adjust gameplay HUD size
+                            if (BP_HUD && Object == BP_HUD) {
+                                // Get scalebox and sizebox
+                                auto FullscreenScaleBox = static_cast<SDK::UFullScreenScaleBox*>(BP_HUD->WidgetTree->RootWidget);
+                                auto SizeBox = static_cast<SDK::USizeBox*>(FullscreenScaleBox->Slots[0]->Content);
 
-                            // Span HUD
-                            if (fSpanHUDAspect != 0.00f) {
-                                // User-defined
-                                if (fSpanHUDAspect > fNativeAspect) {
-                                    SizeBox->SetWidthOverride(1080.00f * fSpanHUDAspect);
+                                // Span HUD
+                                if (bSpanHUD && fSpanHUDAspect != 0.00f) {
+                                    // User-defined
+                                    if (fSpanHUDAspect > fNativeAspect) {
+                                        SizeBox->SetWidthOverride(1080.00f * fSpanHUDAspect);
+                                        SizeBox->SetHeightOverride(1080.00f);
+                                    }
+                                    else if (fSpanHUDAspect < fNativeAspect) {
+                                        SizeBox->SetWidthOverride(1920.00f);
+                                        SizeBox->SetHeightOverride(1920.00f / fSpanHUDAspect);
+                                    }
+                                }
+                                else if (bSpanHUD) {
+                                    // Automatic (full span)
+                                    if (fAspectRatio > fNativeAspect) {
+                                        SizeBox->SetWidthOverride(1920.00f * fAspectMultiplier);
+                                        SizeBox->SetHeightOverride(1080.00f);
+                                    }
+                                    else if (fAspectRatio < fNativeAspect) {
+                                        SizeBox->SetWidthOverride(1920.00f);
+                                        SizeBox->SetHeightOverride(1080.00f / fAspectMultiplier);
+                                    }
+                                }
+                                else {
+                                    // 16:9 (default)
+                                    SizeBox->SetWidthOverride(1920.00f);
                                     SizeBox->SetHeightOverride(1080.00f);
                                 }
-                                else if (fSpanHUDAspect < fNativeAspect) {
-                                    SizeBox->SetWidthOverride(1920.00f);
-                                    SizeBox->SetHeightOverride(1920.00f / fSpanHUDAspect);
-                                }
                             }
-                            else {
-                                // Automatic (full span)
-                                if (fAspectRatio > fNativeAspect) {
+                        }
+
+                        // Fix pre-rendered movies
+                        if (ObjectName.contains("BP_CutsceneCinematic_C")) {
+                            #ifdef _DEBUG
+                            spdlog::info("HUD: Widgets: BP_CutsceneCinematic_C: {}", ObjectName);
+                            spdlog::info("HUD: Widgets: BP_CutsceneCinematic_C: Address: {:x}", (uintptr_t)Object);
+                            #endif
+
+                            // Store address of "BP_CutsceneCinematic_C"
+                            BP_CutsceneCinematic = static_cast<SDK::UBP_CutsceneCinematic_C*>(Object);
+                        }
+
+                        if (bFixHUD && !ObjectName.contains("BP_HUD_C")) {
+                            auto Widget = static_cast<SDK::UUserWidget*>(Object);
+                            auto RootWidget = static_cast<SDK::UWidget*>(Widget->WidgetTree->RootWidget);
+
+                            // Check if RootWidget is a FullScreenScaleBox by name without checking StaticClass()
+                            if (RootWidget->GetName().contains("MyScaleBox")) {
+                                auto FullscreenScaleBox = static_cast<SDK::UFullScreenScaleBox*>(RootWidget);
+                                auto SizeBox = static_cast<SDK::USizeBox*>(FullscreenScaleBox->Slots[0]->Content);
+
+                                // Span to fill the screen
+                                if (fAspectRatio > fNativeAspect && SizeBox->WidthOverride == 1920.00f) {
                                     SizeBox->SetWidthOverride(1920.00f * fAspectMultiplier);
                                     SizeBox->SetHeightOverride(1080.00f);
                                 }
-                                else if (fAspectRatio < fNativeAspect) {
+                                else if (fAspectRatio < fNativeAspect && SizeBox->HeightOverride == 1080.00f) {
                                     SizeBox->SetWidthOverride(1920.00f);
                                     SizeBox->SetHeightOverride(1080.00f / fAspectMultiplier);
                                 }
@@ -346,7 +389,7 @@ void HUD()
                 });
         }
         else {
-            spdlog::error("HUD: Gameplay HUD: Pattern scan failed.");
+            spdlog::error("HUD: HUD Objects: Pattern scan failed.");
         }
     }
 }

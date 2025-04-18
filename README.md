@@ -6,7 +6,7 @@
 **MandragoraFix** is an ASI plugin for Mandragora: Whispers of the Witch Tree that adds ultrawide/narrower support and more.
 
 ## Features
-- Support for ultrawide/narrower resolutions.
+- Ultrawide/narrower resolution support.
 - Resizable gameplay HUD.
 
 ## Installation  
@@ -21,7 +21,7 @@
 - Open **`MandragoraFix.ini`** to adjust settings.
 
 ## Screenshots
-|  |
+| ![ezgif-1ba32d78777a7b](https://github.com/user-attachments/assets/3651888d-eb36-4b52-8d08-8bfe1278c2e9) |
 |:--:|
 | Gameplay |
 

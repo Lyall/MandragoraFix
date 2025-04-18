@@ -118,6 +118,10 @@ void Logging()
         spdlog::set_default_logger(logger);
         spdlog::flush_on(spdlog::level::debug);
 
+        #ifdef _DEBUG
+        spdlog::set_level(spdlog::level::debug); 
+        #endif 
+
         spdlog::info("----------");
         spdlog::info("{:s} v{:s} loaded.", sFixName, sFixVersion);
         spdlog::info("----------");
@@ -345,10 +349,8 @@ void HUD()
                        
                         // Get gameplay HUD
                         if (ObjectName.contains("BP_HUD_C") && BP_HUD != Object) {
-                            #ifdef _DEBUG
-                            spdlog::info("HUD: Widgets: BP_HUD_C: {}", ObjectName);
-                            spdlog::info("HUD: Widgets: BP_HUD_C: Address: {:x}", (uintptr_t)Object);
-                            #endif
+                            spdlog::debug("HUD: Widgets: BP_HUD_C: {}", ObjectName);
+                            spdlog::debug("HUD: Widgets: BP_HUD_C: Address: {:x}", (uintptr_t)Object);
                             
                             // Store address of "BP_HUD_C"
                             BP_HUD = static_cast<SDK::UBP_HUD_C*>(Object);
@@ -370,6 +372,7 @@ void HUD()
                                         SizeBox->SetWidthOverride(1920.00f);
                                         SizeBox->SetHeightOverride(1920.00f / fSpanHUDAspect);
                                     }
+                                    spdlog::debug("HUD: Widgets: BP_HUD_C: Spanned HUD to {}", fSpanHUDAspect);
                                 }
                                 else if (bSpanHUD) {
                                     // Automatic (full span)
@@ -381,6 +384,7 @@ void HUD()
                                         SizeBox->SetWidthOverride(1920.00f);
                                         SizeBox->SetHeightOverride(1080.00f / fAspectMultiplier);
                                     }
+                                    spdlog::debug("HUD: Widgets: BP_HUD_C: Spanned HUD to {}", fAspectRatio);
                                 }
                                 else {
                                     // 16:9 (default)
@@ -392,10 +396,8 @@ void HUD()
 
                         // Fix pre-rendered movies
                         if (ObjectName.contains("BP_CutsceneCinematic_C") && BP_CutsceneCinematic != Object) {
-                            #ifdef _DEBUG
-                            spdlog::info("HUD: Widgets: BP_CutsceneCinematic_C: {}", ObjectName);
-                            spdlog::info("HUD: Widgets: BP_CutsceneCinematic_C: Address: {:x}", (uintptr_t)Object);
-                            #endif
+                            spdlog::debug("HUD: Widgets: BP_CutsceneCinematic_C: {}", ObjectName);
+                            spdlog::debug("HUD: Widgets: BP_CutsceneCinematic_C: Address: {:x}", (uintptr_t)Object);
 
                             // Store address of "BP_CutsceneCinematic_C"
                             BP_CutsceneCinematic = static_cast<SDK::UBP_CutsceneCinematic_C*>(Object);
@@ -403,13 +405,13 @@ void HUD()
                             // Disable double letterboxing >:(
                             BP_CutsceneCinematic->BlackFrame_Bottom->SetVisibility(SDK::ESlateVisibility::Hidden);
                             BP_CutsceneCinematic->BlackFrame_Top->SetVisibility(SDK::ESlateVisibility::Hidden);
+
+                            spdlog::debug("HUD: Widgets: BP_CutsceneCinematic_C: Disabled letterboxing.");
                         }
 
                         if (ObjectName.contains("BP_SubLevelTransition_Widget_C") && BP_SubLevelTransition_Widget != Object) {
-                            #ifdef _DEBUG
-                            spdlog::info("HUD: Widgets: BP_SubLevelTransition_Widget_C: {}", ObjectName);
-                            spdlog::info("HUD: Widgets: BP_SubLevelTransition_Widget_C: Address: {:x}", (uintptr_t)Object);
-                            #endif
+                            spdlog::debug("HUD: Widgets: BP_SubLevelTransition_Widget_C: {}", ObjectName);
+                            spdlog::debug("HUD: Widgets: BP_SubLevelTransition_Widget_C: Address: {:x}", (uintptr_t)Object);
 
                             // Store address of "BP_SubLevelTransition_C"
                             BP_SubLevelTransition_Widget = static_cast<SDK::UBP_SubLevelTransition_Widget_C*>(Object);
@@ -427,6 +429,7 @@ void HUD()
                             }
 
                             CanvasPanelSlot->SetLayout(Layout);
+                            spdlog::debug("HUD: Widgets: BP_SubLevelTransition_Widget_C: Spanned fade transition.");
                         }
 
                         if (bFixHUD && !ObjectName.contains("BP_HUD_C")) {
@@ -442,10 +445,12 @@ void HUD()
                                 if (fAspectRatio > fNativeAspect && SizeBox->WidthOverride == 1920.00f) {
                                     SizeBox->SetWidthOverride(1920.00f * fAspectMultiplier);
                                     SizeBox->SetHeightOverride(1080.00f);
+                                    spdlog::debug("HUD: Widgets: Spanned {}. {:x}.", ObjectName, (uintptr_t)Object);
                                 }
                                 else if (fAspectRatio < fNativeAspect && SizeBox->HeightOverride == 1080.00f) {
                                     SizeBox->SetWidthOverride(1920.00f);
                                     SizeBox->SetHeightOverride(1080.00f / fAspectMultiplier);
+                                    spdlog::debug("HUD: Widgets: Spanned {}. {:x}.", ObjectName, (uintptr_t)Object);
                                 }
                             }
                         }

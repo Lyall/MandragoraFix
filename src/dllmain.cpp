@@ -54,7 +54,7 @@ float fSpanHUDAspect;
 int iCurrentResX;
 int iCurrentResY;
 SDK::UEngine* Engine = nullptr;
-float fMovieAspect = 2.37f;
+float fMovieAspect = 2.3f;
 
 void CalculateAspectRatio(bool bLog)
 {
@@ -291,7 +291,7 @@ void HUD()
             MoviesMidHook = safetyhook::create_mid(MoviesScanResult,
                 [](SafetyHookContext& ctx) {
                     // The pre-rendered videos in this game have embedded letterboxing (of varying sizes).
-                    // So we can only safely crop down to 2.37~, even though some videos have a wider aspect ratio than that.
+                    // So we can only safely crop down to 2.3, even though some videos have a wider aspect ratio than that.
 
                     int VideoWidth = static_cast<int>(ctx.rdi);
                     int VideoHeight = static_cast<int>(ctx.rsi);

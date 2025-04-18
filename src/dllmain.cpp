@@ -54,7 +54,7 @@ float fSpanHUDAspect;
 int iCurrentResX;
 int iCurrentResY;
 SDK::UEngine* Engine = nullptr;
-float fMovieAspect = 2.37f;
+float fMovieAspect = 2.17f;
 
 void CalculateAspectRatio(bool bLog)
 {
@@ -299,7 +299,7 @@ void HUD()
                     if (VideoWidth == 3840 && VideoHeight == 2160) {
                         if (fAspectRatio > fNativeAspect) {
                             float WidthOffset = (1.00f - (fMovieAspect / fAspectRatio)) / 2.00f;
-                            float HeightOffset = -(1.00f - (fNativeAspect / fMovieAspect)) / 2.00f;
+                            float HeightOffset = (1.00f - (fMovieAspect / fNativeAspect)) / 2.00f;
     
                             ctx.xmm9.f32[0] = WidthOffset;          // Left
                             ctx.xmm8.f32[0] = HeightOffset;         // Top

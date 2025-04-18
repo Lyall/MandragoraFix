@@ -9,6 +9,7 @@
 #include "SDK/Engine_classes.hpp"
 #include "SDK/BP_HUD_classes.hpp"
 #include "SDK/BP_CutsceneCinematic_classes.hpp"
+#include "SDK/BinkMediaPlayer_classes.hpp"
 
 #define spdlog_confparse(var) spdlog::info("Config Parse: {}: {}", #var, var)
 
@@ -52,6 +53,7 @@ float fSpanHUDAspect;
 int iCurrentResX;
 int iCurrentResY;
 SDK::UEngine* Engine = nullptr;
+float fMovieAspect = 2.37f;
 
 void CalculateAspectRatio(bool bLog)
 {
@@ -279,6 +281,35 @@ void AspectRatioFOV()
 
 void HUD()
 {
+    if (bFixHUD) {
+        // Movies
+        std::uint8_t* MoviesScanResult = Memory::PatternScan(exeModule, "48 89 ?? ?? ?? F3 44 ?? ?? ?? ?? ?? F3 44 ?? ?? ?? ?? ?? F3 0F ?? ?? ?? ?? F3 0F ?? ?? ?? ?? E8 ?? ?? ?? ??");
+        if (MoviesScanResult) {
+            spdlog::info("HUD: Movies: Address is {:s}+{:x}", sExeName.c_str(), MoviesScanResult - reinterpret_cast<std::uint8_t*>(exeModule));
+            static SafetyHookMid MoviesMidHook{};
+            MoviesMidHook = safetyhook::create_mid(MoviesScanResult,
+                [](SafetyHookContext& ctx) {
+                    int VideoWidth = static_cast<int>(ctx.rdi);
+                    int VideoHeight = static_cast<int>(ctx.rsi);
+
+                    if (VideoWidth == 3840 && VideoHeight == 2160) {
+                        if (fAspectRatio > fNativeAspect) {
+                            float WidthOffset = (1.00f - (fMovieAspect / fAspectRatio)) / 2.00f;
+                            float HeightOffset = -(1.00f - (fNativeAspect / fMovieAspect)) / 2.00f;
+    
+                            ctx.xmm9.f32[0] = WidthOffset;          // Left
+                            ctx.xmm8.f32[0] = HeightOffset;         // Top
+                            ctx.xmm6.f32[0] = 1.00f - WidthOffset;  // Right
+                            ctx.xmm7.f32[0] = 1.00f - HeightOffset; // Bottom
+                        }
+                    }
+                });
+        }
+        else {
+            spdlog::error("HUD: Movies: Pattern scan failed.");
+        }
+    }
+
     if (bFixHUD || bSpanHUD) 
     {
         // HUD Objects
@@ -355,7 +386,7 @@ void HUD()
                         }
 
                         // Fix pre-rendered movies
-                        if (ObjectName.contains("BP_CutsceneCinematic_C")) {
+                        if (ObjectName.contains("BP_CutsceneCinematic_C") && BP_CutsceneCinematic != Object) {
                             #ifdef _DEBUG
                             spdlog::info("HUD: Widgets: BP_CutsceneCinematic_C: {}", ObjectName);
                             spdlog::info("HUD: Widgets: BP_CutsceneCinematic_C: Address: {:x}", (uintptr_t)Object);
@@ -363,6 +394,10 @@ void HUD()
 
                             // Store address of "BP_CutsceneCinematic_C"
                             BP_CutsceneCinematic = static_cast<SDK::UBP_CutsceneCinematic_C*>(Object);
+
+                            // Disable double letterboxing >:(
+                            BP_CutsceneCinematic->BlackFrame_Bottom->SetVisibility(SDK::ESlateVisibility::Hidden);
+                            BP_CutsceneCinematic->BlackFrame_Top->SetVisibility(SDK::ESlateVisibility::Hidden);
                         }
 
                         if (bFixHUD && !ObjectName.contains("BP_HUD_C")) {

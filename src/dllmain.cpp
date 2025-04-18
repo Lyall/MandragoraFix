@@ -9,6 +9,7 @@
 #include "SDK/Engine_classes.hpp"
 #include "SDK/BP_HUD_classes.hpp"
 #include "SDK/BP_CutsceneCinematic_classes.hpp"
+#include "SDK/BP_SubLevelTransition_Widget_classes.hpp"
 #include "SDK/BinkMediaPlayer_classes.hpp"
 
 #define spdlog_confparse(var) spdlog::info("Config Parse: {}: {}", #var, var)
@@ -289,6 +290,9 @@ void HUD()
             static SafetyHookMid MoviesMidHook{};
             MoviesMidHook = safetyhook::create_mid(MoviesScanResult,
                 [](SafetyHookContext& ctx) {
+                    // The pre-rendered videos in this game have embedded letterboxing (of varying sizes).
+                    // So we can only safely crop down to 2.37~, even though some videos have a wider aspect ratio than that.
+
                     int VideoWidth = static_cast<int>(ctx.rdi);
                     int VideoHeight = static_cast<int>(ctx.rsi);
 
@@ -319,6 +323,7 @@ void HUD()
             
             static SDK::UBP_HUD_C* BP_HUD = nullptr;
             static SDK::UBP_CutsceneCinematic_C* BP_CutsceneCinematic = nullptr;
+            static SDK::UBP_SubLevelTransition_Widget_C* BP_SubLevelTransition_Widget = nullptr;
 
             static SDK::UObject* Object = nullptr;
             static SDK::UObject* OldObject = nullptr;
@@ -398,6 +403,30 @@ void HUD()
                             // Disable double letterboxing >:(
                             BP_CutsceneCinematic->BlackFrame_Bottom->SetVisibility(SDK::ESlateVisibility::Hidden);
                             BP_CutsceneCinematic->BlackFrame_Top->SetVisibility(SDK::ESlateVisibility::Hidden);
+                        }
+
+                        if (ObjectName.contains("BP_SubLevelTransition_Widget_C") && BP_SubLevelTransition_Widget != Object) {
+                            #ifdef _DEBUG
+                            spdlog::info("HUD: Widgets: BP_SubLevelTransition_Widget_C: {}", ObjectName);
+                            spdlog::info("HUD: Widgets: BP_SubLevelTransition_Widget_C: Address: {:x}", (uintptr_t)Object);
+                            #endif
+
+                            // Store address of "BP_SubLevelTransition_C"
+                            BP_SubLevelTransition_Widget = static_cast<SDK::UBP_SubLevelTransition_Widget_C*>(Object);
+
+                            auto CanvasPanelSlot = static_cast<SDK::UCanvasPanelSlot*>(BP_SubLevelTransition_Widget->Fade->Slot);
+                            SDK::FAnchorData Layout = CanvasPanelSlot->GetLayout();
+
+                            if (fAspectRatio > fNativeAspect && Layout.Offsets.Right == 1920.00f) {
+                                Layout.Offsets.Right = 1080.00f * fAspectRatio;
+                                Layout.Offsets.Bottom = 1080.00f;
+                            }
+                            else if (fAspectRatio < fNativeAspect && Layout.Offsets.Right == 1080.00f) {
+                                Layout.Offsets.Right = 1920.00f;
+                                Layout.Offsets.Bottom = 1920.00f / fAspectRatio;
+                            }
+
+                            CanvasPanelSlot->SetLayout(Layout);
                         }
 
                         if (bFixHUD && !ObjectName.contains("BP_HUD_C")) {

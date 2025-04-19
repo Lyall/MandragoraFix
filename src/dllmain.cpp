@@ -10,7 +10,6 @@
 #include "SDK/BP_HUD_classes.hpp"
 #include "SDK/BP_CutsceneCinematic_classes.hpp"
 #include "SDK/BP_SubLevelTransition_Widget_classes.hpp"
-#include "SDK/BinkMediaPlayer_classes.hpp"
 
 #define spdlog_confparse(var) spdlog::info("Config Parse: {}: {}", #var, var)
 
@@ -36,6 +35,7 @@ std::string sExeName;
 std::pair DesktopDimensions = { 0,0 };
 const float fPi = 3.1415926535f;
 const float fNativeAspect = 16.00f / 9.00f;
+const float fMovieAspect = 2.17f;
 float fAspectRatio;
 float fAspectMultiplier;
 float fHUDWidth;
@@ -53,8 +53,6 @@ float fSpanHUDAspect;
 // Variables
 int iCurrentResX;
 int iCurrentResY;
-SDK::UEngine* Engine = nullptr;
-float fMovieAspect = 2.17f;
 
 void CalculateAspectRatio(bool bLog)
 {
@@ -326,8 +324,9 @@ void HUD()
             spdlog::info("HUD: HUD Objects: Address is {:s}+{:x}", sExeName.c_str(), HUDObjectsScanResult - reinterpret_cast<std::uint8_t*>(exeModule));
             
             static SDK::UBP_HUD_C* BP_HUD = nullptr;
-            static SDK::UBP_CutsceneCinematic_C* BP_CutsceneCinematic = nullptr;
+            static SDK::UUserWidget* CurrentWidget = nullptr;
             static SDK::UBP_SubLevelTransition_Widget_C* BP_SubLevelTransition_Widget = nullptr;
+            static SDK::UBP_CutsceneCinematic_C* BP_CutsceneCinematic = nullptr;
 
             static SDK::UObject* Object = nullptr;
             static SDK::UObject* OldObject = nullptr;
@@ -347,7 +346,7 @@ void HUD()
                         // Store name of UObject
                         ObjectName = Object->GetName();
                        
-                        // Get gameplay HUD
+                        // Span gameplay HUD
                         if (ObjectName.contains("BP_HUD_C") && BP_HUD != Object) {
                             spdlog::debug("HUD: Widgets: BP_HUD_C: {}", ObjectName);
                             spdlog::debug("HUD: Widgets: BP_HUD_C: Address: {:x}", (uintptr_t)Object);
@@ -355,61 +354,93 @@ void HUD()
                             // Store address of "BP_HUD_C"
                             BP_HUD = static_cast<SDK::UBP_HUD_C*>(Object);
 
-                            // Adjust gameplay HUD size
                             if (BP_HUD && Object == BP_HUD) {
                                 // Get scalebox and sizebox
                                 auto FullscreenScaleBox = static_cast<SDK::UFullScreenScaleBox*>(BP_HUD->WidgetTree->RootWidget);
                                 auto SizeBox = static_cast<SDK::USizeBox*>(FullscreenScaleBox->Slots[0]->Content);
 
-                                // Span HUD
-                                if (bSpanHUD && fSpanHUDAspect != 0.00f) {
-                                    // User-defined
-                                    if (fSpanHUDAspect > fNativeAspect) {
-                                        SizeBox->SetWidthOverride(1080.00f * fSpanHUDAspect);
-                                        SizeBox->SetHeightOverride(1080.00f);
+                                // Figure out interface scale
+                                const bool bIsNormalScale = (SizeBox->WidthOverride == 1920.00f || SizeBox->HeightOverride == 1080.00f);
+                                const bool bIsLargeScale = (SizeBox->WidthOverride == 1280.00f || SizeBox->HeightOverride == 720.00f);
+
+                                if (bIsNormalScale || bIsLargeScale) {
+                                    const float Width = bIsNormalScale ? 1920.00f : 1280.00f;
+                                    const float Height = bIsNormalScale ? 1080.00f : 720.00f;
+                                    const char* ScaleType = bIsNormalScale ? "Normal" : "Large";
+                        
+                                    if (bSpanHUD) {
+                                        if (fSpanHUDAspect != 0.00f) {
+                                            // User-defined span
+                                            if (fSpanHUDAspect > fNativeAspect) {
+                                                SizeBox->SetWidthOverride(Width * fSpanHUDAspect);
+                                                SizeBox->SetHeightOverride(Height);
+                                            }
+                                            else if (fSpanHUDAspect < fNativeAspect) {
+                                                SizeBox->SetWidthOverride(Width);
+                                                SizeBox->SetHeightOverride(Width / fSpanHUDAspect);
+                                            }
+                                            spdlog::debug("HUD: Widgets: BP_HUD_C: {} Scale: Spanned HUD to {}", ScaleType, fSpanHUDAspect);
+                                        }
+                                        else {
+                                            // Automatic span
+                                            if (fAspectRatio > fNativeAspect) {
+                                                SizeBox->SetWidthOverride(Width * fAspectMultiplier);
+                                                SizeBox->SetHeightOverride(Height);
+                                            }
+                                            else if (fAspectRatio < fNativeAspect) {
+                                                SizeBox->SetWidthOverride(Width);
+                                                SizeBox->SetHeightOverride(Height / fAspectMultiplier);
+                                            }
+                                            spdlog::debug("HUD: Widgets: BP_HUD_C: {} Scale: Spanned HUD to {}", ScaleType, fAspectRatio);
+                                        }
                                     }
-                                    else if (fSpanHUDAspect < fNativeAspect) {
-                                        SizeBox->SetWidthOverride(1920.00f);
-                                        SizeBox->SetHeightOverride(1920.00f / fSpanHUDAspect);
+                                    else {
+                                        // Default (16:9)
+                                        SizeBox->SetWidthOverride(Width);
+                                        SizeBox->SetHeightOverride(Height);
                                     }
-                                    spdlog::debug("HUD: Widgets: BP_HUD_C: Spanned HUD to {}", fSpanHUDAspect);
-                                }
-                                else if (bSpanHUD) {
-                                    // Automatic (full span)
-                                    if (fAspectRatio > fNativeAspect) {
-                                        SizeBox->SetWidthOverride(1920.00f * fAspectMultiplier);
-                                        SizeBox->SetHeightOverride(1080.00f);
-                                    }
-                                    else if (fAspectRatio < fNativeAspect) {
-                                        SizeBox->SetWidthOverride(1920.00f);
-                                        SizeBox->SetHeightOverride(1080.00f / fAspectMultiplier);
-                                    }
-                                    spdlog::debug("HUD: Widgets: BP_HUD_C: Spanned HUD to {}", fAspectRatio);
-                                }
-                                else {
-                                    // 16:9 (default)
-                                    SizeBox->SetWidthOverride(1920.00f);
-                                    SizeBox->SetHeightOverride(1080.00f);
                                 }
                             }
                         }
 
-                        // Fix pre-rendered movies
-                        if (ObjectName.contains("BP_CutsceneCinematic_C") && BP_CutsceneCinematic != Object) {
-                            spdlog::debug("HUD: Widgets: BP_CutsceneCinematic_C: {}", ObjectName);
-                            spdlog::debug("HUD: Widgets: BP_CutsceneCinematic_C: Address: {:x}", (uintptr_t)Object);
+                        // Span every other HUD widget
+                        if (bFixHUD && !ObjectName.contains("BP_HUD_C") && CurrentWidget != Object) {
+                            CurrentWidget = static_cast<SDK::UUserWidget*>(Object);
 
-                            // Store address of "BP_CutsceneCinematic_C"
-                            BP_CutsceneCinematic = static_cast<SDK::UBP_CutsceneCinematic_C*>(Object);
+                            // Get root widget
+                            auto RootWidget = static_cast<SDK::UWidget*>(CurrentWidget->WidgetTree->RootWidget);
 
-                            // Disable double letterboxing >:(
-                            BP_CutsceneCinematic->BlackFrame_Bottom->SetVisibility(SDK::ESlateVisibility::Hidden);
-                            BP_CutsceneCinematic->BlackFrame_Top->SetVisibility(SDK::ESlateVisibility::Hidden);
+                            // Check if RootWidget is a FullScreenScaleBox by name without checking StaticClass()
+                            if (RootWidget->GetName().contains("MyScaleBox")) {
+                                auto FullscreenScaleBox = static_cast<SDK::UFullScreenScaleBox*>(RootWidget);
+                                auto SizeBox = static_cast<SDK::USizeBox*>(FullscreenScaleBox->Slots[0]->Content);
 
-                            spdlog::debug("HUD: Widgets: BP_CutsceneCinematic_C: Disabled letterboxing.");
+                                // Figure out interface scale
+                                const bool bIsNormalScale = (SizeBox->WidthOverride == 1920.00f || SizeBox->HeightOverride == 1080.00f);
+                                const bool bIsLargeScale = (SizeBox->WidthOverride == 1280.00f || SizeBox->HeightOverride == 720.00f);
+                                
+                                if (bIsNormalScale || bIsLargeScale) {
+                                    const float Width = bIsNormalScale ? 1920.00f : 1280.00f;
+                                    const float Height = bIsNormalScale ? 1080.00f : 720.00f;
+                                    const char* ScaleType = bIsNormalScale ? "Normal" : "Large";
+
+                                    // Span to fill the screen
+                                    if (fAspectRatio > fNativeAspect && SizeBox->WidthOverride == Width) {
+                                        SizeBox->SetWidthOverride(Width * fAspectMultiplier);
+                                        SizeBox->SetHeightOverride(Height);
+                                        spdlog::debug("HUD: Widgets: {} Scale: Spanned {}. Address: {:x}", ScaleType, ObjectName, (uintptr_t)Object);
+                                    }
+                                    else if (fAspectRatio < fNativeAspect && SizeBox->HeightOverride == Height) {
+                                        SizeBox->SetWidthOverride(Width);
+                                        SizeBox->SetHeightOverride(Height / fAspectMultiplier);
+                                        spdlog::debug("HUD: Widgets: {} Scale: Spanned {}. Address: {:x}", ScaleType, ObjectName, (uintptr_t)Object);
+                                    }
+                                }
+                            }
                         }
-
-                        if (ObjectName.contains("BP_SubLevelTransition_Widget_C") && BP_SubLevelTransition_Widget != Object) {
+         
+                        // Fix fade transitions
+                        if ((ObjectName.contains("BP_SubLevelTransition_Widget_C") || ObjectName.contains("BP_SubLevelTransition_Widget-SmallScreen_C")) && BP_SubLevelTransition_Widget != Object) {
                             spdlog::debug("HUD: Widgets: BP_SubLevelTransition_Widget_C: {}", ObjectName);
                             spdlog::debug("HUD: Widgets: BP_SubLevelTransition_Widget_C: Address: {:x}", (uintptr_t)Object);
 
@@ -432,27 +463,19 @@ void HUD()
                             spdlog::debug("HUD: Widgets: BP_SubLevelTransition_Widget_C: Spanned fade transition.");
                         }
 
-                        if (bFixHUD && !ObjectName.contains("BP_HUD_C")) {
-                            auto Widget = static_cast<SDK::UUserWidget*>(Object);
-                            auto RootWidget = static_cast<SDK::UWidget*>(Widget->WidgetTree->RootWidget);
+                        // Fix pre-rendered movies
+                        if ((ObjectName.contains("BP_CutsceneCinematic_C") || ObjectName.contains("BP_CutsceneCinematic-SmallScreen_C")) && BP_CutsceneCinematic != Object) {
+                            spdlog::debug("HUD: Widgets: BP_CutsceneCinematic_C: {}", ObjectName);
+                            spdlog::debug("HUD: Widgets: BP_CutsceneCinematic_C: Address: {:x}", (uintptr_t)Object);
 
-                            // Check if RootWidget is a FullScreenScaleBox by name without checking StaticClass()
-                            if (RootWidget->GetName().contains("MyScaleBox")) {
-                                auto FullscreenScaleBox = static_cast<SDK::UFullScreenScaleBox*>(RootWidget);
-                                auto SizeBox = static_cast<SDK::USizeBox*>(FullscreenScaleBox->Slots[0]->Content);
+                            // Store address of "BP_CutsceneCinematic_C"
+                            BP_CutsceneCinematic = static_cast<SDK::UBP_CutsceneCinematic_C*>(Object);
 
-                                // Span to fill the screen
-                                if (fAspectRatio > fNativeAspect && SizeBox->WidthOverride == 1920.00f) {
-                                    SizeBox->SetWidthOverride(1920.00f * fAspectMultiplier);
-                                    SizeBox->SetHeightOverride(1080.00f);
-                                    spdlog::debug("HUD: Widgets: Spanned {}. {:x}.", ObjectName, (uintptr_t)Object);
-                                }
-                                else if (fAspectRatio < fNativeAspect && SizeBox->HeightOverride == 1080.00f) {
-                                    SizeBox->SetWidthOverride(1920.00f);
-                                    SizeBox->SetHeightOverride(1080.00f / fAspectMultiplier);
-                                    spdlog::debug("HUD: Widgets: Spanned {}. {:x}.", ObjectName, (uintptr_t)Object);
-                                }
-                            }
+                            // Disable double letterboxing >:(
+                            BP_CutsceneCinematic->BlackFrame_Bottom->SetVisibility(SDK::ESlateVisibility::Hidden);
+                            BP_CutsceneCinematic->BlackFrame_Top->SetVisibility(SDK::ESlateVisibility::Hidden);
+
+                            spdlog::debug("HUD: Widgets: BP_CutsceneCinematic_C: Disabled letterboxing.");
                         }
                     }
                 });

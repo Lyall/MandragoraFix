@@ -18,7 +18,7 @@ HMODULE thisModule;
 
 // Fix details
 std::string sFixName = "MandragoraFix";
-std::string sFixVersion = "0.0.1";
+std::string sFixVersion = "0.0.2";
 std::filesystem::path sFixPath;
 
 // Ini
@@ -44,6 +44,7 @@ float fHUDHeight;
 float fHUDHeightOffset;
 
 // Ini variables
+bool bEnableConsole;
 bool bFixAspect;
 bool bFixFOV;
 bool bFixHUD;
@@ -53,6 +54,7 @@ float fSpanHUDAspect;
 // Variables
 int iCurrentResX;
 int iCurrentResY;
+SDK::UEngine* Engine = nullptr;
 
 void CalculateAspectRatio(bool bLog)
 {
@@ -168,6 +170,7 @@ void Configuration()
     spdlog::info("----------");
 
     // Load settings from ini
+    inipp::get_value(ini.sections["Developer Console"], "Enabled", bEnableConsole);
     inipp::get_value(ini.sections["Fix Aspect Ratio"], "Enabled", bFixAspect);
     inipp::get_value(ini.sections["Fix FOV"], "Enabled", bFixFOV);
     inipp::get_value(ini.sections["Fix HUD"], "Enabled", bFixHUD);
@@ -178,6 +181,7 @@ void Configuration()
     fSpanHUDAspect = std::clamp(fSpanHUDAspect, 0.00f, 10.00f);
 
     // Log ini parse
+    spdlog_confparse(bEnableConsole);
     spdlog_confparse(bFixAspect);
     spdlog_confparse(bFixFOV);
     spdlog_confparse(bFixHUD);
@@ -503,6 +507,55 @@ void HUD()
     }
 }
 
+void EnableConsole()
+{ 
+    if (bEnableConsole) 
+    {
+        // Get GEngine
+        for (int i = 0; i < 200; ++i) { // 20s
+            Engine = SDK::UEngine::GetEngine();
+
+            if (Engine && Engine->ConsoleClass && Engine->GameViewport)
+                break;
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+
+        if (!Engine || !Engine->ConsoleClass || !Engine->GameViewport) {
+            spdlog::error("Enable Console: Failed to find GEngine address after 20 seconds.");
+            return;
+        }
+
+        spdlog::info("Enable Console: GEngine address = {:x}", (uintptr_t)Engine);
+
+        // Construct console
+        SDK::UObject* NewObject = SDK::UGameplayStatics::SpawnObject(Engine->ConsoleClass, Engine->GameViewport);
+        if (NewObject) {
+            Engine->GameViewport->ViewportConsole = static_cast<SDK::UConsole*>(NewObject);
+            spdlog::info("Enable Console: Console object constructed.");
+        }
+        else {
+            spdlog::error("Enable Console: Failed to construct console object.");
+            return;
+        }
+
+        // Get input settings
+        SDK::UInputSettings* InputSettings = SDK::UInputSettings::GetDefaultObj();
+
+        if (InputSettings) {
+            if (InputSettings->ConsoleKeys && InputSettings->ConsoleKeys.Num() > 0) {
+                spdlog::info("Enable Console: Console enabled - access it using key: {}.", InputSettings->ConsoleKeys[0].KeyName.ToString());
+            }
+            else {
+                spdlog::error("Enable Console: Console enabled but no console key is bound.\nAdd this to %LOCALAPPDATA%\\MandragoraWotWT\\Saved\\Config\\WindowsNoEditor\\Input.ini -\n[/Script/Engine.InputSettings]\nConsoleKeys = Tilde\nAlter the key from 'Tidle' if necessary.");
+            }
+        }
+        else {
+            spdlog::error("Enable Console: Failed to retreive input settings.");
+        }
+    }
+}
+
 DWORD __stdcall Main(void*)
 {
     Logging();
@@ -511,6 +564,7 @@ DWORD __stdcall Main(void*)
     CurrentResolution();
     AspectRatioFOV();
     HUD();
+    EnableConsole();
 
     return true;
 }

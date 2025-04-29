@@ -478,25 +478,6 @@ void HUD()
                             // Disable double letterboxing >:(
                             BP_CutsceneCinematic->BlackFrame_Bottom->SetVisibility(SDK::ESlateVisibility::Hidden);
                             BP_CutsceneCinematic->BlackFrame_Top->SetVisibility(SDK::ESlateVisibility::Hidden);
-
-                            // Create background image
-                            SDK::UObject* imgObj = SDK::UGameplayStatics::SpawnObject(SDK::UImage::StaticClass(), SDK::UImage::StaticClass()->Outer);
-                            SDK::UImage* bgImg = static_cast<SDK::UImage*>(imgObj);
-
-                            // Set brush to black
-                            bgImg->Brush.TintColor = SDK::FSlateColor(SDK::FLinearColor(0.00f, 0.00f, 0.00f, 1.00f));
-
-                            // Add background image widget as child of root widget
-                            auto RootWidget = static_cast<SDK::UPanelWidget*>(BP_CutsceneCinematic->WidgetTree->RootWidget);
-                            RootWidget->AddChild(bgImg);
-
-                            // Fill screen with background image and set z-order so it's behind the movie texture
-                            SDK::UCanvasPanelSlot* Slot = static_cast<SDK::UCanvasPanelSlot*>(bgImg->Slot);
-                            Slot->SetAnchors(SDK::FAnchors(SDK::FVector2D(0.00f, 0), SDK::FVector2D(1.00f, 1.00f)));
-                            Slot->SetOffsets(SDK::FMargin(0.00f, 0.00f, 0.00f, 0.00f));
-                            Slot->SetZOrder(-10000);
-
-                            spdlog::debug("HUD: Widgets: BP_CutsceneCinematic_C: Disabled letterboxing and added black background.");
                         }
                     }
                 });
